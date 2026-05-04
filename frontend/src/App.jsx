@@ -1,313 +1,436 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import axios from 'axios';
-import Plot from 'react-plotly.js';
-import { 
-  Dna, Search, Activity, FileSpreadsheet, AlignJustify, 
-  History, TestTube, Save, ChevronRight, AlertCircle, CheckCircle2, Gamepad2, Globe 
+import {
+  AlertCircle,
+  AlignJustify,
+  ChevronRight,
+  FileSpreadsheet,
+  Gamepad2,
+  Search,
 } from 'lucide-react';
 import ArcadeTab from './ArcadeTab';
-import EvolutionTab from './EvolutionTab';
 
-const API_URL = "http://127.0.0.1:8000/api";
+const API_URL = '/api';
 
-const LoadingSpinner = () => (
-  <div className="flex animate-pulse items-center gap-2 text-blue-600 font-medium">
-    <div className="w-5 h-5 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-    Processing Analysis...
+const api = axios.create({
+  baseURL: API_URL,
+  timeout: 30000,
+});
+
+const blastApi = axios.create({
+  baseURL: API_URL,
+  timeout: 0,
+});
+
+const GeneCraftLogo = () => (
+  <div className="flex items-center gap-4">
+    <div className="genecraft-logo">
+      <svg viewBox="0 0 80 80" aria-hidden="true" className="h-14 w-14">
+        <defs>
+          <linearGradient id="gcFrame" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#00C6FF" />
+            <stop offset="100%" stopColor="#00F2FE" />
+          </linearGradient>
+          <linearGradient id="gcHelix" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#00FF88" />
+            <stop offset="100%" stopColor="#00F2FE" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M24 10H56L70 24V56L56 70H24L10 56V24Z"
+          fill="rgba(11,15,25,0.72)"
+          stroke="url(#gcFrame)"
+          strokeWidth="2.5"
+        />
+        <path
+          d="M28 22C40 22 40 58 52 58"
+          fill="none"
+          stroke="url(#gcHelix)"
+          strokeWidth="3.5"
+          strokeLinecap="round"
+        />
+        <path
+          d="M52 22C40 22 40 58 28 58"
+          fill="none"
+          stroke="#00C6FF"
+          strokeWidth="3.5"
+          strokeLinecap="round"
+        />
+        <path d="M31 30H49" stroke="#7dd3fc" strokeWidth="2" strokeLinecap="round" />
+        <path d="M30 40H50" stroke="#7dd3fc" strokeWidth="2" strokeLinecap="round" />
+        <path d="M31 50H49" stroke="#7dd3fc" strokeWidth="2" strokeLinecap="round" />
+        <circle cx="28" cy="22" r="3" fill="#00F2FE" />
+        <circle cx="52" cy="22" r="3" fill="#00FF88" />
+        <circle cx="28" cy="58" r="3" fill="#00FF88" />
+        <circle cx="52" cy="58" r="3" fill="#00F2FE" />
+      </svg>
+    </div>
+    <div>
+      <div className="text-2xl font-black tracking-[0.18em] text-white uppercase">Gene<span className="text-cyan-300">Craft</span></div>
+    </div>
   </div>
 );
 
-const Card = ({ title, children, className="" }) => (
-  <div className={`bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden ${className}`}>
-    <div className="bg-slate-50/80 border-b border-slate-200 px-5 py-3 font-semibold text-slate-800 flex items-center gap-2">
-      <ChevronRight size={16} className="text-blue-500" />
-      {title}
+const Card = ({ title, children, className = '' }) => (
+  <section className={`rounded-3xl border border-cyan-400/10 bg-white/6 shadow-[0_0_30px_rgba(0,255,255,0.06)] backdrop-blur-xl ${className}`}>
+    <div className="border-b border-cyan-400/10 px-5 py-4">
+      <div className="flex items-center gap-2 text-white">
+        <ChevronRight size={16} className="text-cyan-600" />
+        <h2 className="font-semibold">{title}</h2>
+      </div>
     </div>
-    <div className="p-5">
-      {children}
-    </div>
-  </div>
+    <div className="p-5">{children}</div>
+  </section>
 );
 
 const ErrorAlert = ({ message }) => (
-  <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-center gap-3 my-4">
-    <AlertCircle size={20} />
-    <span className="font-medium">{message}</span>
+  <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+    <div className="flex items-start gap-3">
+      <AlertCircle size={18} className="mt-0.5 shrink-0" />
+      <span>{message}</span>
+    </div>
   </div>
 );
 
-// === TABS ====
-function SequenceTab() {
-  const [seq, setSeq] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [data, setData] = useState(null);
-  const [orfs, setOrfs] = useState([]);
-  const [error, setError] = useState(null);
+const LoadingSpinner = ({ label }) => (
+  <span className="inline-flex items-center gap-2 font-medium">
+    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+    {label}
+  </span>
+);
 
-  const analyze = async () => {
-    if (!seq) return;
-    setLoading(true); setError(null);
-    try {
-      const res = await axios.post(`${API_URL}/analyze-sequence`, { sequence: seq });
-      if(res.data.error) throw new Error(res.data.error);
-      setData(res.data);
-      
-      // Auto fetch ORFs
-      const orfRes = await axios.post(`${API_URL}/orf`, { sequence: seq });
-      setOrfs(orfRes.data.orfs);
-    } catch (err) {
-      setError(err.message || 'Server connection failed.');
+async function request(path, payload, client = api) {
+  try {
+    const res = await client.post(path, payload);
+    if (res.data?.error) {
+      const detail = res.data?.details ? ` (${res.data.details})` : '';
+      throw new Error(`${res.data.error}${detail}`);
     }
-    setLoading(false);
+    return res.data;
+  } catch (err) {
+    if (err.response?.data?.error) {
+      const detail = err.response.data?.details ? ` (${err.response.data.details})` : '';
+      throw new Error(`${err.response.data.error}${detail}`);
+    }
+    if (err.code === 'ERR_NETWORK') {
+      throw new Error('Cannot reach the backend API. Start the Flask server on http://127.0.0.1:8000 and retry.');
+    }
+    if (err.message) {
+      throw err;
+    }
+    throw new Error('Request failed.');
+  }
+}
+
+function AlignmentTab() {
+  const [s1, setS1] = useState('');
+  const [s2, setS2] = useState('');
+  const [mode, setMode] = useState('global');
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const align = async () => {
+    if (!s1.trim() || !s2.trim()) return;
+    setLoading(true);
+    setError('');
+    try {
+      const result = await request('/align', { seq1: s1, seq2: s2, type: mode });
+      setData(result);
+    } catch (err) {
+      setError(err.message || 'Alignment failed.');
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="grid lg:grid-cols-12 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="lg:col-span-5 space-y-6">
-        <Card title="Input Biological Sequence">
-          <label className="text-sm font-semibold text-slate-600 mb-2 block">DNA / RNA String (RAW or FASTA)</label>
-          <textarea 
-            className="w-full h-40 p-4 font-mono text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
-            placeholder=">Sequence_1\nATGCGTACGTAGCTAG..."
-            value={seq} onChange={(e)=>setSeq(e.target.value)}
-          ></textarea>
-          <button 
-            className="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-semibold shadow-md transition-all flex justify-center items-center gap-2"
-            onClick={analyze} disabled={loading}
-          >
-            {loading ? <LoadingSpinner /> : <><TestTube size={20} /> Execute Central Dogma Protocol</>}
-          </button>
-        </Card>
-      </div>
-
-      <div className="lg:col-span-7">
-        {error && <ErrorAlert message={error} />}
-        {data && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-              <Card title="Analytics Chart" className="col-span-1">
-                <div className="h-48 flex justify-center items-center">
-                  <Plot
-                    data={[{ values: [data.gc_content, 100-data.gc_content], labels: ['GC Content', 'AT Content'], type: 'pie', hole: 0.5, marker: {colors: ['#2563eb', '#cbd5e1']} }]}
-                    layout={{ width: 220, height: 220, margin: {t:0, b:0, l:0, r:0}, showlegend: false }}
-                    config={{ displayModeBar: false }}
-                  />
-                  <div className="ml-4">
-                    <div className="text-2xl font-bold text-blue-600">{data.gc_content}%</div>
-                    <div className="text-xs font-semibold text-slate-500">GC SATURATION</div>
-                  </div>
-                </div>
-              </Card>
-              <Card title="Properties" className="col-span-1">
-                <ul className="space-y-4">
-                  <li className="flex justify-between items-center pb-2 border-b"><span className="text-slate-500">Length</span> <span className="font-mono font-semibold">{data.length} bp</span></li>
-                  <li className="flex justify-between items-center pb-2 border-b"><span className="text-slate-500">Transcription</span> <span className="font-mono text-emerald-600 font-semibold">{data.mrna.length} bases</span></li>
-                  <li className="flex justify-between items-center pb-2"><span className="text-slate-500">Translated Peptides</span> <span className="font-mono text-indigo-600 font-semibold">{data.protein.length} AA</span></li>
-                </ul>
-              </Card>
+    <div className="space-y-6">
+      <Card title="Alignment Workspace">
+        <div className="grid gap-4 md:grid-cols-2">
+          <textarea
+            className="h-36 w-full rounded-2xl border border-cyan-400/15 bg-[#101826] p-4 font-mono text-sm text-cyan-200 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10"
+            placeholder="ATGCGTACGTTAGC"
+            value={s1}
+            onChange={(e) => setS1(e.target.value)}
+          />
+          <textarea
+            className="h-36 w-full rounded-2xl border border-cyan-400/15 bg-[#101826] p-4 font-mono text-sm text-cyan-200 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10"
+            placeholder="ATGCGGACGTCAGC"
+            value={s2}
+            onChange={(e) => setS2(e.target.value)}
+          />
+        </div>
+        <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <select
+              className="rounded-2xl border border-cyan-400/15 bg-[#101826] px-4 py-2 text-sm font-medium text-cyan-100"
+              value={mode}
+              onChange={(e) => setMode(e.target.value)}
+            >
+              <option value="global">Global alignment - Needleman-Wunsch</option>
+              <option value="local">Local alignment - Smith-Waterman</option>
+            </select>
+            <div className="rounded-2xl border border-cyan-400/10 bg-white/5 px-4 py-2 text-sm text-slate-300">
+              Green = match, red = mismatch, yellow = gap
             </div>
+          </div>
+          <button
+            className="rounded-2xl bg-[linear-gradient(90deg,#00C6FF,#00F2FE)] px-5 py-2.5 font-semibold text-[#0B0F19] transition hover:scale-[1.03] hover:shadow-[0_0_18px_rgba(0,242,254,0.45)] disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={align}
+            disabled={loading}
+          >
+            {loading ? <LoadingSpinner label="Aligning..." /> : 'Run Alignment'}
+          </button>
+        </div>
+      </Card>
 
-            <Card title="Structural Outputs">
-               <div className="space-y-4">
-                  <div>
-                    <div className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">mRNA Visual</div>
-                    <pre className="p-3 bg-slate-900 text-emerald-400 rounded-md text-sm font-mono overflow-x-auto border border-emerald-900/50">{data.mrna}</pre>
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">Functional Protein</div>
-                    <pre className="p-3 bg-slate-900 text-indigo-300 rounded-md text-sm font-mono overflow-x-auto border border-indigo-900/50">{data.protein}</pre>
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">Reverse Complement (3&apos; -&gt; 5&apos;)</div>
-                    <pre className="p-3 bg-slate-100 text-slate-600 rounded-md text-sm font-mono overflow-x-auto border border-slate-200">{data.rev_comp}</pre>
-                  </div>
-               </div>
+      {error ? <ErrorAlert message={error} /> : null}
+
+      {data ? (
+        <>
+          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-5">
+            <Card title="Algorithm">
+              <div className="text-lg font-black text-white">{data.algorithm}</div>
+              <div className="mt-2 text-sm text-slate-400">{data.mode === 'global' ? 'Full-length comparison' : 'Best local region'}</div>
             </Card>
-
-            <Card title="Open Reading Frames (ORFs)">
-               {orfs.length === 0 ? <p className="text-slate-500">No standard ORFs detected.</p> : (
-                 <div className="overflow-x-auto relative">
-                   <table className="w-full text-sm text-left">
-                     <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b">
-                       <tr><th className="py-3 px-4">Frame</th><th className="py-3 px-4">Start</th><th className="py-3 px-4">Stop</th><th className="py-3 px-4">Length</th></tr>
-                     </thead>
-                     <tbody>
-                       {orfs.map((o, i) => (
-                         <tr key={i} className="border-b bg-white hover:bg-slate-50 font-mono">
-                           <td className="py-3 px-4 font-bold text-blue-600">{o.frame}</td>
-                           <td className="py-3 px-4">{o.start}</td>
-                           <td className="py-3 px-4">{o.stop}</td>
-                           <td className="py-3 px-4 font-semibold">{o.length} bp</td>
-                         </tr>
-                       ))}
-                     </tbody>
-                   </table>
-                 </div>
-               )}
+            <Card title="Score">
+              <div className="text-3xl font-black text-cyan-300">{data.score}</div>
+            </Card>
+            <Card title="Matches">
+              <div className="text-3xl font-black text-emerald-600">{data.matches}</div>
+            </Card>
+            <Card title="Mismatches">
+              <div className="text-3xl font-black text-rose-600">{data.mismatches}</div>
+            </Card>
+            <Card title="Gaps">
+              <div className="text-3xl font-black text-amber-500">{data.gaps}</div>
             </Card>
           </div>
-        )}
-      </div>
+
+          <Card title="Traceback Alignment">
+            <div className="mb-4 flex flex-wrap gap-3 text-sm">
+              <div className="rounded-2xl border border-cyan-400/10 bg-white/5 px-4 py-2 text-slate-300">
+                <span className="font-semibold text-white">Sequence 1:</span> {data.sequence_types?.[0] || 'DNA'}
+              </div>
+              <div className="rounded-2xl border border-cyan-400/10 bg-white/5 px-4 py-2 text-slate-300">
+                <span className="font-semibold text-white">Sequence 2:</span> {data.sequence_types?.[1] || 'DNA'}
+              </div>
+              <div className="rounded-2xl border border-cyan-400/10 bg-white/5 px-4 py-2 text-slate-300">
+                <span className="font-semibold text-white">Alignment length:</span> {data.alignment_length}
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-3xl border border-cyan-400/10 bg-[#08111d] p-5 shadow-inner">
+              <pre
+                className="alignment"
+                dangerouslySetInnerHTML={{ __html: data.seq1_html }}
+              />
+              <pre className="alignment alignment-line">{data.match_line}</pre>
+              <pre
+                className="alignment"
+                dangerouslySetInnerHTML={{ __html: data.seq2_html }}
+              />
+            </div>
+          </Card>
+        </>
+      ) : null}
     </div>
   );
 }
 
-function AlignmentTab() {
-  const [s1, setS1] = useState(''); const [s2, setS2] = useState('');
-  const [mode, setMode] = useState('global');
-  const [data, setData] = useState(null); const [loading, setLoading] = useState(false);
-
-  const align = async () => {
-    if(!s1 || !s2) return;
-    setLoading(true);
-    try {
-      const res = await axios.post(`${API_URL}/align`, {seq1: s1, seq2: s2, type: mode});
-      setData(res.data);
-    } catch (err) {}
-    setLoading(false);
-  }
-
-  return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-      <Card title="Sequence Alignment Architecture">
-         <div className="grid md:grid-cols-2 gap-4 mb-4">
-            <div><label className="text-sm font-semibold text-slate-600 block mb-1">Target Sequence A</label><textarea className="w-full p-3 border rounded text-sm font-mono h-24" value={s1} onChange={e=>setS1(e.target.value)}></textarea></div>
-            <div><label className="text-sm font-semibold text-slate-600 block mb-1">Query Sequence B</label><textarea className="w-full p-3 border rounded text-sm font-mono h-24" value={s2} onChange={e=>setS2(e.target.value)}></textarea></div>
-         </div>
-         <div className="flex gap-4 items-center">
-            <select className="border p-2 rounded text-sm font-semibold text-slate-700 bg-slate-50" value={mode} onChange={e=>setMode(e.target.value)}>
-              <option value="global">Global (Needleman-Wunsch)</option>
-              <option value="local">Local (Smith-Waterman)</option>
-            </select>
-            <button className="bg-indigo-600 text-white px-6 py-2 rounded font-semibold hover:bg-indigo-700 transition" onClick={align} disabled={loading}>{loading ? 'Aligning...' : 'Execute Alignment'}</button>
-         </div>
-      </Card>
-      
-      {data && (
-        <Card title={`Consensus Outcome (Score: ${data.score})`}>
-          <pre className="bg-slate-900 text-slate-300 p-6 rounded-lg font-mono text-sm overflow-x-auto leading-relaxed tracking-widest">{data.alignment_str}</pre>
-        </Card>
-      )}
-    </div>
-  )
-}
-
 function BlastTab() {
   const [seq, setSeq] = useState('');
-  const [data, setData] = useState(null); const [loading, setLoading] = useState(false);
+  const [program, setProgram] = useState('blastn');
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const performBlast = async () => {
-    if(seq.length < 15) return alert("Must exceed 15 bp");
+    if (!seq.trim()) return;
     setLoading(true);
+    setError('');
     try {
-      const res = await axios.post(`${API_URL}/blast`, {sequence: seq});
-      setData(res.data);
-    } catch(e) {}
-    setLoading(false);
-  }
+      const result = await request('/blast', { sequence: seq, program }, blastApi);
+      setData(result);
+    } catch (err) {
+      setError(err.message || 'BLAST request failed.');
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-      <Card title="NCBI Database Cloud BLAST">
-         <textarea className="w-full p-4 border rounded font-mono h-32 mb-4" placeholder="Enter query string..." value={seq} onChange={e=>setSeq(e.target.value)}></textarea>
-         <button className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-6 rounded transition" onClick={performBlast}>{loading ? 'Fetching from NCBI Servers... (might take 2 mins)' : 'Commence Global Search'}</button>
+    <div className="space-y-6">
+      <Card title="NCBI BLAST">
+        <div className="space-y-4">
+          <select
+            className="rounded-2xl border border-cyan-400/15 bg-[#101826] px-4 py-2 text-sm font-medium text-cyan-100"
+            value={program}
+            onChange={(e) => setProgram(e.target.value)}
+          >
+            <option value="blastn">BLASTN (DNA/RNA)</option>
+            <option value="blastp">BLASTP (Protein)</option>
+          </select>
+          <textarea
+            className="h-36 w-full rounded-2xl border border-cyan-400/15 bg-[#101826] p-4 font-mono text-sm text-cyan-200"
+            placeholder={program === 'blastp' ? 'Paste protein query' : 'Paste DNA or RNA query'}
+            value={seq}
+            onChange={(e) => setSeq(e.target.value)}
+          />
+        </div>
+        <button className="mt-4 rounded-2xl bg-[linear-gradient(90deg,#00C6FF,#00F2FE)] px-5 py-2.5 font-semibold text-[#0B0F19] transition hover:scale-[1.03] hover:shadow-[0_0_18px_rgba(0,242,254,0.45)] disabled:opacity-60" onClick={performBlast} disabled={loading}>
+          {loading ? 'Running BLAST...' : 'Run BLAST'}
+        </button>
       </Card>
 
-      {data && data.hits && (
-        <Card title="Matched Homology">
-          <div className="space-y-4">
-            {data.hits.map((h, i) => (
-              <div key={i} className="p-4 border border-emerald-100 bg-emerald-50/30 rounded-lg">
-                <div className="font-semibold text-slate-800 mb-2">{h.title}</div>
-                <div className="flex gap-6 text-sm text-slate-600 font-mono">
-                  <span><strong className="text-slate-800">Score:</strong> {h.score}</span>
-                  <span><strong className="text-slate-800">E-Value:</strong> {h.e_value}</span>
-                  <span><strong className="text-slate-800">Identity:</strong> {h.identities}</span>
-                  <span className="text-emerald-700 font-bold bg-emerald-100 px-2 rounded">{h.organism}</span>
-                </div>
-              </div>
-            ))}
+      {error ? <ErrorAlert message={error} /> : null}
+      {data?.hits ? (
+        <Card title={data.rid ? `RID ${data.rid}` : 'Hits'}>
+          {data.message ? (
+            <div className="mb-4 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
+              {data.message}
+            </div>
+          ) : null}
+          <div className="mb-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-cyan-400/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+              <span className="font-semibold text-white">Program:</span> {(data.program || program).toUpperCase()}
+            </div>
+            <div className="rounded-2xl border border-cyan-400/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+              <span className="font-semibold text-white">Detected input:</span> {(data.sequence_type || 'unknown').toUpperCase()}
+            </div>
           </div>
+          {data.hits.length === 0 ? (
+            <div className="text-sm text-slate-400">No hits</div>
+          ) : (
+            <div className="space-y-4">
+              {data.hits.map((hit, index) => (
+                <article key={`${hit.title}-${index}`} className="rounded-2xl border border-cyan-400/10 bg-white/5 p-4">
+                  <h3 className="font-semibold text-white">{hit.title}</h3>
+                  <div className="mt-3 grid gap-2 text-sm text-slate-300 md:grid-cols-2 xl:grid-cols-4">
+                    <div><span className="font-semibold text-cyan-200">Score:</span> {hit.score}</div>
+                    <div><span className="font-semibold text-cyan-200">E-value:</span> {hit.e_value}</div>
+                    <div><span className="font-semibold text-cyan-200">Identity:</span> {hit.identities}</div>
+                    <div><span className="font-semibold text-cyan-200">Organism:</span> {hit.organism}</div>
+                    <div><span className="font-semibold text-cyan-200">Accession:</span> {hit.accession}</div>
+                    <div><span className="font-semibold text-cyan-200">Hit length:</span> {hit.length}</div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </Card>
-      )}
+      ) : null}
     </div>
-  )
+  );
 }
 
 function ProteinTab() {
   const [seq, setSeq] = useState('');
   const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const analyze = async () => {
+    if (!seq.trim()) return;
+    setLoading(true);
+    setError('');
     try {
-      const res = await axios.post(`${API_URL}/protein-analysis`, {sequence: seq});
-      setData(res.data);
-    } catch(e) {}
-  }
+      const result = await request('/protein-analysis', { sequence: seq });
+      setData(result);
+    } catch (err) {
+      setError(err.message || 'Protein analysis failed.');
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const aminoSummary = useMemo(() => {
+    if (!data?.amino_count) return [];
+    return Object.entries(data.amino_count).filter(([, count]) => count > 0).sort((a, b) => b[1] - a[1]);
+  }, [data]);
 
   return (
-    <div className="grid md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4">
-      <Card title="Peptide String Analysis">
-         <textarea className="w-full p-4 border rounded font-mono h-32 mb-4 uppercase" placeholder="Enter Protein sequence (M V L...)" value={seq} onChange={e=>setSeq(e.target.value)}></textarea>
-         <button className="bg-amber-500 hover:bg-amber-600 text-white font-semibold py-2 px-6 rounded transition" onClick={analyze}>Analyze Structure</button>
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,420px)_1fr]">
+      <Card title="Protein">
+        <textarea className="h-40 w-full rounded-2xl border border-cyan-400/15 bg-[#101826] p-4 font-mono text-sm uppercase text-cyan-200" placeholder="MKTFFVIL" value={seq} onChange={(e) => setSeq(e.target.value.toUpperCase())} />
+        <button className="mt-4 rounded-2xl bg-[linear-gradient(90deg,#00C6FF,#00F2FE)] px-5 py-2.5 font-semibold text-[#0B0F19] transition hover:scale-[1.03] hover:shadow-[0_0_18px_rgba(0,242,254,0.45)] disabled:opacity-60" onClick={analyze} disabled={loading}>
+          {loading ? 'Analyzing...' : 'Analyze'}
+        </button>
+        {error ? <div className="mt-4"><ErrorAlert message={error} /></div> : null}
       </Card>
-      {data && (
-        <Card title="Properties">
-          <div className="grid grid-cols-2 gap-4">
-             <div className="bg-slate-50 p-4 rounded text-center border"><div className="text-2xl font-bold">{data.weight}</div><div className="text-xs text-slate-500 font-bold mt-1">MOL. WEIGHT (Da)</div></div>
-             <div className="bg-slate-50 p-4 rounded text-center border"><div className="text-2xl font-bold">{data.pi}</div><div className="text-xs text-slate-500 font-bold mt-1">ISOELECTRIC PT (pI)</div></div>
-             <div className="bg-slate-50 p-4 rounded text-center border"><div className="text-2xl font-bold">{data.hydrophobicity}</div><div className="text-xs text-slate-500 font-bold mt-1">GRAVY SCORE</div></div>
-             <div className="bg-slate-50 p-4 rounded text-center border"><div className="text-2xl font-bold">{Object.keys(data.amino_count || {}).length} Types</div><div className="text-xs text-slate-500 font-bold mt-1">AMINO ACID DIVERSITY</div></div>
-          </div>
-        </Card>
-      )}
+
+      {data ? (
+        <div className="space-y-6">
+          <Card title="Properties">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-2xl border border-cyan-400/10 bg-white/5 p-4 text-center"><div className="text-2xl font-black text-white">{data.length}</div><div className="mt-1 text-xs font-semibold uppercase tracking-wider text-slate-400">Length</div></div>
+              <div className="rounded-2xl border border-cyan-400/10 bg-white/5 p-4 text-center"><div className="text-2xl font-black text-white">{data.weight}</div><div className="mt-1 text-xs font-semibold uppercase tracking-wider text-slate-400">Weight</div></div>
+              <div className="rounded-2xl border border-cyan-400/10 bg-white/5 p-4 text-center"><div className="text-2xl font-black text-white">{data.pi}</div><div className="mt-1 text-xs font-semibold uppercase tracking-wider text-slate-400">pI</div></div>
+              <div className="rounded-2xl border border-cyan-400/10 bg-white/5 p-4 text-center"><div className="text-2xl font-black text-white">{data.hydrophobicity}</div><div className="mt-1 text-xs font-semibold uppercase tracking-wider text-slate-400">GRAVY</div></div>
+            </div>
+          </Card>
+
+          <Card title="Amino Acids">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {aminoSummary.map(([amino, count]) => (
+                <div key={amino} className="rounded-2xl border border-cyan-400/10 bg-white/5 px-4 py-3">
+                  <div className="text-lg font-black text-white">{amino}</div>
+                  <div className="text-sm text-slate-400">{count}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      ) : null}
     </div>
-  )
+  );
 }
 
-// === MAIN APP ====
-const TabBtn = ({ active, set, icon: Icon, label }) => (
-  <button onClick={()=>set()} className={`flex items-center gap-2 px-6 py-4 font-semibold text-sm transition-all border-b-[3px] ${active ? 'border-blue-600 text-blue-700 bg-blue-50/50' : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}>
-    <Icon className={`w-5 h-5 ${active ? 'text-blue-600' : 'text-slate-400'}`} /> {label}
-  </button>
-);
+const TabButton = ({ active, icon, label, onClick }) => {
+  const IconComponent = icon;
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
+        active ? 'bg-[linear-gradient(90deg,#00C6FF,#00F2FE)] text-[#0B0F19] shadow-[0_0_24px_rgba(0,242,254,0.2)]' : 'text-slate-300 hover:bg-white/8 hover:text-white'
+      }`}
+    >
+      <IconComponent size={18} className={active ? 'text-[#0B0F19]' : 'text-cyan-300'} />
+      <span>{label}</span>
+    </button>
+  );
+};
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('sequence');
-  
-  return (
-    <div className="min-h-screen flex flex-col font-sans">
-        <header className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center z-10 sticky top-0 shadow-sm">
-           <div className="flex items-center gap-4">
-             <div className="p-2.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg ring-4 ring-blue-50"><Dna className="text-white w-6 h-6" /></div>
-             <div>
-                <h1 className="text-2xl font-extrabold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent tracking-tight">BioAnalysis Platform</h1>
-                <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-0.5">Enterprise Bioinformatics Suite</p>
-             </div>
-           </div>
-           <nav className="flex items-center gap-4">
-              <button className="text-sm font-bold text-slate-500 hover:text-slate-800 flex items-center gap-2"><History size={16}/> Logs</button>
-              <button className="px-5 py-2.5 bg-slate-900 text-white rounded-lg text-sm font-semibold hover:bg-slate-800 transition shadow flex items-center gap-2"><Save size={16}/> Cache Status</button>
-           </nav>
-        </header>
+  const [activeTab, setActiveTab] = useState('align');
 
-        <div className="bg-white border-b border-slate-200 flex overflow-x-auto shadow-sm">
-          <TabBtn active={activeTab==='sequence'} set={()=>setActiveTab('sequence')} icon={Activity} label="Sequence Processing" />
-          <TabBtn active={activeTab==='align'} set={()=>setActiveTab('align')} icon={AlignJustify} label="Pairwise Alignment" />
-          <TabBtn active={activeTab==='blast'} set={()=>setActiveTab('blast')} icon={Search} label="NCBI Cloud BLAST" />
-          <TabBtn active={activeTab==='protein'} set={()=>setActiveTab('protein')} icon={FileSpreadsheet} label="Protein Dynamics" />
-          <TabBtn active={activeTab==='arcade'} set={()=>setActiveTab('arcade')} icon={Gamepad2} label="Shooter Arcade" />
-          <TabBtn active={activeTab==='darwin'} set={()=>setActiveTab('darwin')} icon={Globe} label="Darwin Simulator" />
-        </div>
-        
-        <main className="flex-1 w-full max-w-screen-2xl mx-auto p-8">
-           {activeTab === 'sequence' && <SequenceTab />}
-           {activeTab === 'align' && <AlignmentTab />}
-           {activeTab === 'blast' && <BlastTab />}
-           {activeTab === 'protein' && <ProteinTab />}
-           {activeTab === 'arcade' && <ArcadeTab />}
-           {activeTab === 'darwin' && <EvolutionTab />}
+  return (
+    <div className="min-h-screen bg-[linear-gradient(135deg,#0B0F19,#0f2027,#203a43,#2c5364)] text-white">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col lg:flex-row">
+        <aside className="border-b border-cyan-400/10 bg-[#0B0F19]/75 px-4 py-5 backdrop-blur lg:sticky lg:top-0 lg:h-screen lg:w-[340px] lg:border-b-0 lg:border-r lg:px-6">
+          <div className="rounded-3xl border border-cyan-400/10 bg-white/5 p-4">
+            <GeneCraftLogo />
+          </div>
+
+          <div className="mt-6 space-y-2">
+            <TabButton active={activeTab === 'align'} onClick={() => setActiveTab('align')} icon={AlignJustify} label="Alignment" />
+            <TabButton active={activeTab === 'blast'} onClick={() => setActiveTab('blast')} icon={Search} label="NCBI BLAST" />
+            <TabButton active={activeTab === 'protein'} onClick={() => setActiveTab('protein')} icon={FileSpreadsheet} label="Protein" />
+            <TabButton active={activeTab === 'arcade'} onClick={() => setActiveTab('arcade')} icon={Gamepad2} label="Arcade" />
+          </div>
+        </aside>
+
+        <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8">
+          {activeTab === 'align' && <AlignmentTab />}
+          {activeTab === 'blast' && <BlastTab />}
+          {activeTab === 'protein' && <ProteinTab />}
+          {activeTab === 'arcade' && <ArcadeTab />}
         </main>
+      </div>
     </div>
-  )
+  );
 }
