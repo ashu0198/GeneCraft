@@ -1,8 +1,35 @@
 @import "tailwindcss";
 
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
 body {
-  background-color: #f8fafc;
-  color: #0f172a;
+  margin: 0;
+  min-width: 320px;
+  background: linear-gradient(135deg, #0b0f19, #1a2a3a);
+  color: white;
+  font-family: "Segoe UI", "Inter", sans-serif;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: -50%;
+  background: radial-gradient(circle, rgba(0, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+  animation: moveBg 20s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
 }
 
 pre::-webkit-scrollbar {
@@ -15,4 +42,49 @@ pre::-webkit-scrollbar-track {
 pre::-webkit-scrollbar-thumb {
   background-color: #cbd5e1;
   border-radius: 20px;
+}
+
+.alignment {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 16px;
+  letter-spacing: 2px;
+  line-height: 1.8;
+  white-space: pre;
+}
+
+.alignment-line {
+  color: #94a3b8;
+}
+
+.alignment .match {
+  color: #00ff88;
+  font-weight: 700;
+}
+
+.alignment .mismatch {
+  color: #ff4d4d;
+}
+
+.alignment .gap {
+  color: #ffd166;
+}
+
+.genecraft-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  border-radius: 1.25rem;
+  background: radial-gradient(circle at top left, rgba(0, 242, 254, 0.18), rgba(255, 255, 255, 0.03));
+  box-shadow: 0 0 24px rgba(0, 198, 255, 0.12);
+}
+
+@keyframes moveBg {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(-200px, -200px);
+  }
 }
